@@ -1,11 +1,11 @@
-# Haptic Touchpad for ASUS ExpertBook B9406CAA
+# Haptic Touchpad for PixArt 093A:4F05
 
-An Omarchy bar widget for the PixArt `093A:4F05` haptic touchpad in the ASUS ExpertBook B9406CAA. It controls the physical click threshold and haptic feedback strength, applies both immediately, and restores the selected values at startup.
+An Omarchy bar widget for the PixArt `093A:4F05` haptic touchpad, first verified in the ASUS ExpertBook B9406CAA. It controls the physical click threshold and haptic feedback strength, applies both immediately, and restores the selected values at startup.
 
 > [!IMPORTANT]
-> The supported model is **B9406CAA**. “B4096” is a common transposition, but it is not the model identifier used by this project. Do not install the controller on another model unless its touchpad has been independently verified.
+> Compatibility is based on the touchpad hardware and HID report descriptor, not a laptop marketing name. **B9406CAA is currently the only model verified with exact device `093A:4F05`.** Other ASUS laptops advertise haptic touchpads, but that alone does not prove they use this controller.
 
-[Follow the complete installation tutorial](TUTORIAL.md) for hardware checks, controller setup, plugin installation, testing, troubleshooting, and removal.
+[Read the compatibility evidence](COMPATIBILITY.md), then [follow the installation tutorial](TUTORIAL.md) for hardware checks, controller setup, plugin installation, testing, troubleshooting, and removal.
 
 ## What it controls
 
@@ -27,15 +27,15 @@ The plugin reads status without privilege. **Apply settings** invokes only `/usr
 
 ## Requirements
 
-- ASUS ExpertBook **B9406CAA**
 - PixArt internal HID touchpad `093A:4F05`
+- A matching HID report descriptor; the verified descriptor is 964 bytes with SHA-256 `6f5470f0c99a355d00a380a4c3c0f5fd6fad1982ce2b18496a161172bdd297d4`
 - Omarchy with plugin support
-- `touchpad-fix` from the compatible `asus-expertbook-linux` checkout
 - `haptic-click-control` version **1.1.0 or newer** from that checkout
+- On B9406CAA, `touchpad-fix` from the compatible `asus-expertbook-linux` checkout
 
 The companion `haptic-click-control` module currently exists in the patched checkout used to develop this plugin and has not yet been merged into the upstream [`burakgon/asus-expertbook-linux`](https://github.com/burakgon/asus-expertbook-linux) repository. A public plugin release should wait until both repositories are published at stable URLs.
 
-## Quick installation
+## Quick installation on B9406CAA
 
 If both source trees are already present locally:
 

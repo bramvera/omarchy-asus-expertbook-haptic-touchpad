@@ -1,8 +1,9 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
-import "Model.js" as Model
 
 Panel {
   id: root
@@ -88,8 +89,8 @@ Panel {
           width: parent.width
           title: "Haptic Touchpad"
           meta: controller.available
-            ? "B9406CAA · " + controller.device
-            : "ASUS B9406CAA · PIXART 093A:4F05"
+            ? "PIXART 093A:4F05 · " + controller.device
+            : "PIXART 093A:4F05"
           detail: controller.busy ? "Working" : (controller.available ? "Ready" : "Unavailable")
           foreground: root.foreground
           fontFamily: root.fontFamily

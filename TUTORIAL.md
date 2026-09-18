@@ -1,6 +1,6 @@
-# Step-by-step setup for ASUS ExpertBook B9406CAA
+# Step-by-step setup for PixArt 093A:4F05
 
-This guide installs Linux control for the physical click threshold and haptic feedback strength of the PixArt `093A:4F05` touchpad, then adds the controls to the Omarchy bar.
+This guide installs Linux control for the physical click threshold and haptic feedback strength of the PixArt `093A:4F05` touchpad, then adds the controls to the Omarchy bar. ASUS ExpertBook B9406CAA is the verified reference machine; another model must pass the hardware checks first.
 
 ## 1. Confirm the laptop model
 
@@ -10,7 +10,7 @@ Run:
 cat /sys/class/dmi/id/product_name
 ```
 
-Continue only if the result identifies the ASUS ExpertBook **B9406CAA**. This project does not claim support for similarly named ExpertBook models.
+Record the exact result. **B9406CAA** is already verified. A different model is a candidate only if it passes the device and descriptor checks below.
 
 ## 2. Confirm the touchpad hardware
 
@@ -33,7 +33,27 @@ Expected result:
 
 The final number varies between boots. The controller discovers it automatically; never hardcode the number in the configuration.
 
-If nothing is printed, stop. The controller deliberately refuses unrecognized devices.
+If nothing is printed, stop. A generic “haptic touchpad” specification is insufficient, and the controller deliberately refuses unrecognized devices.
+
+For a model other than B9406CAA, compare its HID report descriptor with the verified unit:
+
+```bash
+for path in /sys/class/hidraw/hidraw*/device/uevent; do
+  if grep -qx 'HID_ID=0018:0000093A:00004F05' "$path"; then
+    device_dir=$(dirname "$path")
+    wc -c "$device_dir/report_descriptor"
+    sha256sum "$device_dir/report_descriptor"
+  fi
+done
+```
+
+The verified B9406CAA descriptor is 964 bytes with SHA-256:
+
+```text
+6f5470f0c99a355d00a380a4c3c0f5fd6fad1982ce2b18496a161172bdd297d4
+```
+
+An identical hash is strong evidence of the same HID interface. Record the model and outputs in [COMPATIBILITY.md](COMPATIBILITY.md) before calling it verified.
 
 ## 3. Obtain compatible source trees
 
@@ -52,9 +72,9 @@ test -f "$HOME/asus-expertbook-linux/haptic-click-control/module.sh" && echo rea
 
 It must print `ready`.
 
-## 4. Install the touchpad compatibility fix
+## 4. Install the B9406CAA cursor compatibility fix when applicable
 
-The existing `touchpad-fix` remains required. It masks malformed pressure axes that can make libinput reject cursor motion. The haptic controller does not remove that quirk or expose those malformed axes again.
+On B9406CAA, the existing `touchpad-fix` remains required. It masks malformed pressure axes that can make libinput reject cursor motion. The haptic controller does not remove that quirk or expose those malformed axes again.
 
 ```bash
 cd "$HOME/asus-expertbook-linux"
@@ -62,6 +82,8 @@ sudo ./patch.sh install touchpad-fix
 ```
 
 If it is already installed, the patcher updates or confirms it safely.
+
+On another model, install this quirk only if it has the same libinput pressure-axis failure and the quirk has been reviewed for that model’s DMI name. Haptic feature control and libinput pressure handling are separate concerns.
 
 ## 5. Install the haptic controller
 
