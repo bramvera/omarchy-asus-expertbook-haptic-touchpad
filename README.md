@@ -2,7 +2,7 @@
 
 An [Omarchy](https://omarchy.org) bar widget for the PixArt `093A:4F05` haptic touchpad. It sets how hard you press before the touchpad clicks and how strong the click feedback feels. Settings apply immediately and are restored at startup.
 
-Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touchpad controller; see [COMPATIBILITY.md](COMPATIBILITY.md).
+Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touchpad controller; see [COMPATIBILITY.md](COMPATIBILITY.md) for the hardware check and a four-step test.
 
 ## Settings
 
