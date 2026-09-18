@@ -6,7 +6,7 @@ An Omarchy bar widget for the ASUS ExpertBook B9406CAA PixArt `093A:4F05` haptic
 
 - Omarchy with plugin support
 - ASUS ExpertBook B9406CAA with the supported PixArt touchpad
-- The root-owned `asus-b9406-hapticctl` controller from [`asus-expertbook-linux`](https://github.com/burakgon/asus-expertbook-linux)
+- The root-owned `asus-b9406-hapticctl` controller from the companion `haptic-click-control` module in your patched [`asus-expertbook-linux`](https://github.com/burakgon/asus-expertbook-linux) checkout
 
 Install the controller before enabling the plugin:
 
@@ -14,6 +14,8 @@ Install the controller before enabling the plugin:
 cd ~/asus-expertbook-linux
 sudo ./patch.sh install haptic-click-control
 ```
+
+The companion module is currently part of the local patched checkout used with this plugin; publish or merge that module before advertising the plugin for general installation.
 
 The plugin reads status without privilege. Apply uses Polkit to run the fixed root-owned controller at `/usr/local/bin/asus-b9406-hapticctl`; it never runs plugin code as root.
 
