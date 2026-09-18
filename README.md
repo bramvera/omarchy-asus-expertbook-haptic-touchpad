@@ -100,7 +100,7 @@ Either way, the rule only tells libinput to ignore the touchpad's broken pressur
 Add the plugin. The Omarchy installer clones the repository and never runs anything as root:
 
 ```bash
-omarchy plugin add <repository-url> --enable
+omarchy plugin add https://github.com/bramvera/omarchy-haptic-touchpad.git --enable
 ```
 
 ### Step 2: install the controller
