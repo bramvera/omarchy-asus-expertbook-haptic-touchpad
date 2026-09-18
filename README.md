@@ -50,7 +50,7 @@ Useful IPC checks:
 ```bash
 omarchy-shell shell summon io.github.bramvera.haptic-touchpad '{}'
 omarchy-shell shell hide io.github.bramvera.haptic-touchpad
-omarchy-shell ipc call io.github.bramvera.haptic-touchpad status
+omarchy-shell io.github.bramvera.haptic-touchpad status
 ```
 
 Remove the plugin with:
