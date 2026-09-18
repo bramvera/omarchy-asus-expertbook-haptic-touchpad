@@ -2,70 +2,100 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 Panel {
   id: root
   moduleName: "io.github.bramvera.haptic-touchpad"
   ipcTarget: moduleName
+  // manageIpc: false so this panel owns the single IpcHandler for its target
+  // and can add refresh/status on top of the standard open/close methods.
   manageIpc: false
 
-  property var anchorItem: null
-  property var hostWidget: null
-  readonly property var barIdentity: hostWidget || root
+  // Values the user is editing. They only reach the controller on Apply.
   property int draftClickForce: 3
   property int draftIntensity: 100
 
-  readonly property int clickForce: controller.clickForce
-  readonly property int hapticIntensity: controller.hapticIntensity
-  readonly property bool intensityConfigured: controller.intensityConfigured
-  readonly property bool available: controller.available
-  readonly property bool busy: controller.busy
   readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.45)
+  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property bool dirty: !intensityConfigured
-    || draftClickForce !== clickForce
-    || draftIntensity !== hapticIntensity
+  readonly property bool dirty: !touchpad.intensityConfigured
+    || draftClickForce !== touchpad.clickForce
+    || draftIntensity !== touchpad.hapticIntensity
 
   function syncDrafts() {
-    draftClickForce = controller.clickForce
-    draftIntensity = controller.hapticIntensity
+    draftClickForce = touchpad.clickForce
+    draftIntensity = touchpad.hapticIntensity
   }
 
-  function open() {
-    controller.refresh()
-    root.controller.show()
-  }
-
-  function close() { root.controller.hide() }
-  function toggle() { opened ? close() : open() }
-  function refresh() { controller.refresh() }
   function apply() {
-    if (!controller.busy) controller.apply(draftClickForce, draftIntensity)
+    if (touchpad.available && dirty) touchpad.apply(draftClickForce, draftIntensity)
   }
-  function switchPanel(direction) {
-    if (bar && typeof bar.switchPanelFrom === "function")
-      return bar.switchPanelFrom(barIdentity, direction)
-    return false
+
+  function stepForce(delta) {
+    draftClickForce = Math.max(1, Math.min(3, draftClickForce + delta))
   }
+
+  function stepIntensity(delta) {
+    draftIntensity = Math.max(0, Math.min(100, draftIntensity + delta))
+  }
+
+  onOpenedChanged: if (opened) touchpad.refresh()
+
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   Service {
-    id: controller
+    id: touchpad
     onRefreshed: root.syncDrafts()
+  }
+
+  IpcHandler {
+    target: root.ipcTarget
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function refresh(): string { touchpad.refresh(); return "ok" }
+    function status(): string {
+      return JSON.stringify({
+        available: touchpad.available,
+        clickForce: touchpad.clickForce,
+        hapticIntensity: touchpad.intensityConfigured ? touchpad.hapticIntensity : null
+      })
+    }
+  }
+
+  BarIconButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    text: "󰝁"
+    active: root.opened
+    tooltipText: touchpad.available
+      ? "Haptic touchpad · " + Model.forceName(touchpad.clickForce)
+        + (touchpad.intensityConfigured ? " · " + touchpad.hapticIntensity + "%" : "")
+      : "Haptic touchpad · controller unavailable"
+    onPressed: function(buttonCode) {
+      if (buttonCode === Qt.RightButton) touchpad.refresh()
+      else root.toggle()
+    }
   }
 
   KeyboardPanel {
     id: panel
-    anchorItem: root.anchorItem
-    owner: root.barIdentity
+    anchorItem: button
+    owner: root
     bar: root.bar
     open: root.opened
-    centerOnBar: true
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(430))
-    contentHeight: panel.fittedContentHeight(content.implicitHeight)
+    contentWidth: panel.fittedContentWidth(Style.space(380))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -73,34 +103,29 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onActivateRequested: root.apply()
-      onTextKey: function(text) {
-        if (text === "1" || text === "2" || text === "3") root.draftClickForce = Number(text)
-        else if (text === "r" || text === "R") root.refresh()
-        else if (text === "+" || text === "=") root.draftIntensity = Math.min(100, root.draftIntensity + 5)
-        else if (text === "-") root.draftIntensity = Math.max(0, root.draftIntensity - 5)
+      onMoveRequested: function(dx, dy) {
+        if (dx !== 0) root.stepForce(dx)
+        else if (dy !== 0) root.stepIntensity(-dy * 5)
       }
 
       Column {
-        id: content
+        id: column
         width: parent.width
         spacing: Style.space(14)
 
         PanelHero {
           width: parent.width
           title: "Haptic Touchpad"
-          meta: controller.available
-            ? "PIXART 093A:4F05 · " + controller.device
-            : "PIXART 093A:4F05"
-          detail: controller.busy ? "Working" : (controller.available ? "Ready" : "Unavailable")
+          meta: touchpad.available ? "Click force and feedback strength" : "Controller not installed"
+          detail: touchpad.busy ? "Working" : (touchpad.available ? "Ready" : "Unavailable")
           foreground: root.foreground
           fontFamily: root.fontFamily
           iconComponent: Component {
             Text {
-              text: "TP"
+              text: "󰝁"
               color: root.foreground
               font.family: root.fontFamily
-              font.pixelSize: Style.font.title
-              font.bold: true
+              font.pixelSize: Style.font.display
             }
           }
           trailingControl: Component {
@@ -109,28 +134,28 @@ Panel {
               tooltipText: "Refresh"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              enabled: !controller.busy
-              onClicked: root.refresh()
+              enabled: !touchpad.busy
+              onClicked: touchpad.refresh()
             }
           }
         }
 
-        PanelSeparator { width: parent.width }
+        PanelSeparator {
+          width: parent.width
+          foreground: root.foreground
+        }
 
         Column {
           width: parent.width
           spacing: Style.space(8)
 
-          PanelSectionHeader { text: "CLICK FORCE" }
-
-          Text {
-            width: parent.width
-            text: "Higher force reduces accidental clicks. This setting changes the pressure threshold that triggers the haptic click."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
+          PanelSectionHeader {
+            text: "CLICK FORCE"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
           }
+
+          Caption { text: "How hard you press before the touchpad clicks. Firm helps avoid accidental clicks." }
 
           ButtonGroup {
             options: [
@@ -141,7 +166,6 @@ Panel {
             value: String(root.draftClickForce)
             foreground: root.foreground
             fontFamily: root.fontFamily
-            focusable: true
             onChanged: function(value) { root.draftClickForce = Number(value) }
           }
         }
@@ -156,6 +180,8 @@ Panel {
             PanelSectionHeader {
               Layout.fillWidth: true
               text: "HAPTIC INTENSITY"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
             Text {
@@ -180,22 +206,17 @@ Panel {
             onReleased: function(value) { root.draftIntensity = Math.round(value / 5) * 5 }
           }
 
-          Text {
-            width: parent.width
-            visible: controller.available && !controller.intensityConfigured
-            text: "No intensity is saved yet. Applying will save the selected value and use it at startup."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WordWrap
+          Caption {
+            visible: touchpad.available && !touchpad.intensityConfigured
+            text: "No intensity saved yet. Apply saves both settings and restores them at startup."
           }
         }
 
         Text {
           width: parent.width
-          visible: controller.lastError !== "" || controller.actionStatus !== ""
-          text: controller.lastError !== "" ? controller.lastError : controller.actionStatus
-          color: controller.lastError !== "" ? (bar ? bar.urgent : Color.urgent) : root.dim
+          visible: text !== ""
+          text: touchpad.lastError !== "" ? touchpad.lastError : touchpad.actionStatus
+          color: touchpad.lastError !== "" ? root.urgent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           wrapMode: Text.WordWrap
@@ -203,26 +224,27 @@ Panel {
 
         Button {
           width: parent.width
-          text: controller.busy ? "Applying…" : (root.dirty ? "Apply settings" : "Settings applied")
+          text: touchpad.busy ? "Applying…" : (root.dirty ? "Apply settings" : "Settings applied")
           iconText: root.dirty ? "󰄬" : ""
           bordered: true
           selected: root.dirty
           focusable: true
-          enabled: controller.available && !controller.busy && root.dirty
+          enabled: touchpad.available && !touchpad.busy && root.dirty
           foreground: root.foreground
           fontFamily: root.fontFamily
           onClicked: root.apply()
         }
 
-        Text {
-          width: parent.width
-          text: "Apply asks for administrator approval, saves the settings for startup, and sends them to the touchpad. Firmware readback is unavailable, so confirmed values come from the saved configuration."
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.WordWrap
-        }
+        Caption { text: "Apply asks for administrator approval. Settings are saved and restored at startup." }
       }
     }
+  }
+
+  component Caption: Text {
+    width: parent.width
+    color: root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
   }
 }

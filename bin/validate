@@ -32,6 +32,6 @@ omarchy plugin validate "$PLUGIN_DIR"
 QML_IMPORT_ROOT="$VALIDATION_TMP/qml-import"
 mkdir "$QML_IMPORT_ROOT"
 ln -s "$OMARCHY_ROOT/shell" "$QML_IMPORT_ROOT/qs"
-"$QMLLINT_BIN" -I "$QML_IMPORT_ROOT" BarWidget.qml Panel.qml Service.qml
+"$QMLLINT_BIN" -I "$QML_IMPORT_ROOT" Panel.qml Service.qml
 
 printf 'Haptic Touchpad validation passed.\n'

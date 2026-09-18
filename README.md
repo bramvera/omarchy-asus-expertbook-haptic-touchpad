@@ -1,92 +1,108 @@
-# Haptic Touchpad for PixArt 093A:4F05
+# Haptic Touchpad
 
-An Omarchy bar widget for the PixArt `093A:4F05` haptic touchpad, first verified in the ASUS ExpertBook B9406CAA. It controls the physical click threshold and haptic feedback strength, applies both immediately, and restores the selected values at startup.
+An [Omarchy](https://omarchy.org) bar widget for the PixArt `093A:4F05` haptic touchpad. It sets how hard you press before the touchpad clicks and how strong the click feedback feels. Settings apply immediately and are restored at startup.
 
-> [!IMPORTANT]
-> Compatibility is based on the touchpad hardware and HID report descriptor, not a laptop marketing name. **B9406CAA is currently the only model verified with exact device `093A:4F05`.** Other ASUS laptops advertise haptic touchpads, but that alone does not prove they use this controller.
+Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touchpad controller; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-[Read the compatibility evidence](COMPATIBILITY.md), then [follow the installation tutorial](TUTORIAL.md) for hardware checks, controller setup, plugin installation, testing, troubleshooting, and removal.
-
-## What it controls
+## Settings
 
 | Setting | Values | Effect |
-|---|---:|---|
-| Click force | Light, Medium, Firm | Changes how much physical pressure triggers a click. Firm helps prevent accidental clicks. |
-| Haptic intensity | 0–100% | Changes the strength of the vibration produced for a click. |
-
-These controls are independent. Click force changes the trigger threshold; haptic intensity changes how strong the feedback feels after the threshold is crossed.
-
-## How it works
-
-The solution has two parts:
-
-1. The Omarchy plugin provides the `TP` bar widget and settings panel.
-2. The root-owned `asus-b9406-hapticctl` controller validates values, sends HID feature reports to the exact PixArt device, and saves the selected values for a systemd service to restore at boot.
-
-The plugin reads status without privilege. **Apply settings** invokes only `/usr/local/bin/asus-b9406-hapticctl` through Polkit with validated numeric arguments. Plugin-owned code never runs as root.
+|---|---|---|
+| Click force | Light, Medium, Firm | Pressure needed to trigger a click. Firm helps avoid accidental clicks. |
+| Haptic intensity | 0–100% | Strength of the vibration produced by a click. |
 
 ## Requirements
 
-- PixArt internal HID touchpad `093A:4F05`
-- A matching HID report descriptor; the verified descriptor is 964 bytes with SHA-256 `6f5470f0c99a355d00a380a4c3c0f5fd6fad1982ce2b18496a161172bdd297d4`
+- A PixArt `093A:4F05` touchpad (see [COMPATIBILITY.md](COMPATIBILITY.md) to check)
 - Omarchy with plugin support
-- `haptic-click-control` version **1.1.0 or newer** from that checkout
-- On B9406CAA, `touchpad-fix` from the compatible `asus-expertbook-linux` checkout
+- The `haptic-click-control` module from [asus-expertbook-linux](https://github.com/burakgon/asus-expertbook-linux), version 1.1.0 or newer
 
-The companion `haptic-click-control` module currently exists in the patched checkout used to develop this plugin and has not yet been merged into the upstream [`burakgon/asus-expertbook-linux`](https://github.com/burakgon/asus-expertbook-linux) repository. A public plugin release should wait until both repositories are published at stable URLs.
+The module installs a root-owned controller, `asus-b9406-hapticctl`, and a systemd service that restores the saved values at boot. The plugin only reads status and asks Polkit for approval when you apply settings. Plugin code never runs as root.
 
-## Quick installation on B9406CAA
+## Installation
 
-If both source trees are already present locally:
+Install the controller from a checkout of `asus-expertbook-linux`:
 
 ```bash
-cd ~/asus-expertbook-linux
-sudo ./patch.sh install touchpad-fix
 sudo ./patch.sh install haptic-click-control
-
-omarchy plugin add file://$HOME/dev/omaplugins/haptic-touchpad --enable --yes
 ```
 
-Verify the controller before opening the panel:
+On the B9406CAA also install `touchpad-fix`, which is a separate cursor-movement quirk for that model:
+
+```bash
+sudo ./patch.sh install touchpad-fix
+```
+
+Check that the controller works:
 
 ```bash
 asus-b9406-hapticctl --status --json
 systemctl is-active asus-b9406-haptic-touchpad.service
 ```
 
-The first command must return JSON with `"ok": true`; the second must print `active`.
+The first command prints JSON with `"ok": true` and the second prints `active`.
 
-## Using the widget
+Then add the plugin:
 
-- Left-click `TP` to open the panel.
-- Right-click `TP` to refresh controller status.
-- Choose **Light**, **Medium**, or **Firm**.
-- Adjust haptic intensity.
-- Select **Apply settings** and approve the Polkit dialog.
+```bash
+omarchy plugin add <repository-url> --enable
+```
 
-The bar tooltip and panel show the saved requested values. The firmware rejects HID `GET_FEATURE`, so Linux cannot read the values back from the device itself. Apply still validates, saves, and transmits both settings.
+The widget appears in the right section of the bar.
+
+## Usage
+
+- Left-click the icon to open the panel. Right-click to refresh.
+- Pick **Light**, **Medium**, or **Firm**, set the intensity, and press **Apply settings**.
+- Approve the Polkit dialog.
+
+Keyboard: arrow keys change the values, Enter applies, Escape closes.
+
+The touchpad firmware cannot report its current values, so the panel shows the values that were last saved.
+
+## Troubleshooting
+
+**The panel says the controller is unavailable.** Check the binary and service:
+
+```bash
+asus-b9406-hapticctl --status --json
+systemctl status asus-b9406-haptic-touchpad.service
+```
+
+**The panel shows `unrecognized arguments: --json`.** The controller is older than 1.1.0. Reinstall it from an up-to-date checkout.
+
+**No Polkit dialog appears.** Make sure the session is unlocked and the shell is running:
+
+```bash
+omarchy-shell shell ping
+```
+
+**Light and Firm feel identical.** Keep the intensity fixed while comparing click force. Click force changes the trigger threshold; intensity changes the feedback strength.
+
+## Removal
+
+```bash
+omarchy plugin remove io.github.bramvera.haptic-touchpad
+sudo ./patch.sh uninstall haptic-click-control   # from the asus-expertbook-linux checkout
+```
+
+Uninstalling the module stops boot-time restores but leaves `/etc/asus-b9406-haptic-touchpad.conf` in place.
 
 ## Development
-
-Validate the project with:
 
 ```bash
 bin/validate
 ```
 
-This runs the JavaScript model tests, `omarchy plugin validate`, and Qt 6 `qmllint` with Omarchy’s runtime imports.
+This runs the model unit tests, `omarchy plugin validate`, and `qmllint`. Saving a file under `~/.config/omarchy/plugins/` hot-reloads the plugin.
 
-Useful IPC checks:
+IPC:
 
 ```bash
-omarchy-shell shell summon io.github.bramvera.haptic-touchpad '{}'
+omarchy-shell io.github.bramvera.haptic-touchpad toggle
+omarchy-shell io.github.bramvera.haptic-touchpad refresh
 omarchy-shell io.github.bramvera.haptic-touchpad status
-omarchy-shell shell hide io.github.bramvera.haptic-touchpad
 ```
-
-## Security
-
-Omarchy plugins run unsandboxed in the desktop shell. Review the source before installation. This plugin builds process calls as argument arrays, accepts only the fixed controller path, and rejects click-force or intensity values outside the supported ranges.
 
 ## License
 
