@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Removes the controller, its boot service, and this uninstaller. The saved
+# settings file in /etc is left in place so a later install restores the same
+# values. Installed as /usr/local/bin/asus-b9406-haptic-touchpad-uninstall so
+# it still works after `omarchy plugin remove` has deleted the plugin files.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Run this with sudo." >&2
+  exit 1
+fi
+
+systemctl disable --now asus-b9406-haptic-touchpad.service 2>/dev/null || true
+rm -f /etc/systemd/system/asus-b9406-haptic-touchpad.service \
+  /usr/local/bin/asus-b9406-hapticctl \
+  /usr/local/bin/asus-b9406-haptic-touchpad-uninstall
+systemctl daemon-reload
+echo "Removed. Settings file /etc/asus-b9406-haptic-touchpad.conf was kept."

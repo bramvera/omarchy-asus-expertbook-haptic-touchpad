@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Installs the haptic touchpad controller and the service that restores the
+# saved settings at boot. Run with sudo from any location.
+set -euo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ $EUID -ne 0 ]]; then
+  echo "Run this with sudo." >&2
+  exit 1
+fi
+
+if ! "$here/asus-b9406-hapticctl" --status >/dev/null; then
+  echo "No PixArt 093A:4F05 touchpad found. See COMPATIBILITY.md." >&2
+  exit 1
+fi
+
+install -Dm755 "$here/asus-b9406-hapticctl" /usr/local/bin/asus-b9406-hapticctl
+install -Dm644 "$here/asus-b9406-haptic-touchpad.service" /etc/systemd/system/asus-b9406-haptic-touchpad.service
+# The uninstaller lives outside the plugin directory, because
+# `omarchy plugin remove` deletes that directory without running anything.
+install -Dm755 "$here/uninstall" /usr/local/bin/asus-b9406-haptic-touchpad-uninstall
+systemctl daemon-reload
+systemctl enable --now asus-b9406-haptic-touchpad.service
+
+echo "Installed. Remove later with: sudo asus-b9406-haptic-touchpad-uninstall"
+echo "Current settings:"
+/usr/local/bin/asus-b9406-hapticctl --status

@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Configure the PixArt 093A:4F05 haptic touchpad on an ASUS B9406CAA.
+
+The device exposes standard HID feature reports but does not implement
+GET_FEATURE correctly.  This tool therefore only sends validated SET_FEATURE
+requests and never guesses the device's current state.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+
+HID_ID = "HID_ID=0018:0000093A:00004F05"
+DEFAULT_CONFIG = Path("/etc/asus-b9406-haptic-touchpad.conf")
+CLICK_FORCE_REPORT = 8
+HAPTIC_INTENSITY_REPORT = 9
+CLICK_FORCE_NAMES = {1: "light", 2: "medium", 3: "firm"}
+
+# Equivalent to HIDIOCSFEATURE(2) from <linux/hidraw.h>.
+_IOC_NRBITS = 8
+_IOC_TYPEBITS = 8
+_IOC_SIZEBITS = 14
+_IOC_NRSHIFT = 0
+_IOC_TYPESHIFT = _IOC_NRSHIFT + _IOC_NRBITS
+_IOC_SIZESHIFT = _IOC_TYPESHIFT + _IOC_TYPEBITS
+_IOC_DIRSHIFT = _IOC_SIZESHIFT + _IOC_SIZEBITS
+_IOC_READ = 2
+_IOC_WRITE = 1
+
+
+def ioc(direction: int, type_: int, number: int, size: int) -> int:
+    return (
+        (direction << _IOC_DIRSHIFT)
+        | (type_ << _IOC_TYPESHIFT)
+        | (number << _IOC_NRSHIFT)
+        | (size << _IOC_SIZESHIFT)
+    )
+
+
+def hid_iocsfeature(size: int) -> int:
+    return ioc(_IOC_READ | _IOC_WRITE, ord("H"), 0x06, size)
+
+
+def device_hid_id(device: Path) -> str | None:
+    if device.parent != Path("/dev") or not device.name.startswith("hidraw"):
+        return None
+    try:
+        return (Path("/sys/class/hidraw") / device.name / "device" / "uevent").read_text()
+    except OSError:
+        return None
+
+
+def matching_device(explicit: Path | None) -> Path | None:
+    if explicit is not None:
+        return explicit if HID_ID in (device_hid_id(explicit) or "") else None
+
+    for entry in sorted(Path("/sys/class/hidraw").glob("hidraw*")):
+        device = Path("/dev") / entry.name
+        if HID_ID in (device_hid_id(device) or ""):
+            return device
+    return None
+
+
+def find_device(explicit: Path | None, wait_seconds: float) -> Path:
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        device = matching_device(explicit)
+        if device is not None and device.exists():
+            return device
+        if time.monotonic() >= deadline:
+            target = str(explicit) if explicit else "PixArt 093A:4F05 hidraw device"
+            raise RuntimeError(f"could not find {target}")
+        time.sleep(0.25)
+
+
+def read_config(path: Path) -> dict[str, int]:
+    settings: dict[str, int] = {"CLICK_FORCE": 3}
+    if not path.exists():
+        return settings
+
+    valid = {"CLICK_FORCE", "HAPTIC_INTENSITY"}
+    for line_number, original in enumerate(path.read_text().splitlines(), start=1):
+        line = original.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if "=" not in line:
+            raise ValueError(f"{path}:{line_number}: expected NAME=VALUE")
+        name, value = (part.strip() for part in line.split("=", 1))
+        if name not in valid:
+            raise ValueError(f"{path}:{line_number}: unknown setting {name!r}")
+        try:
+            settings[name] = int(value, 10)
+        except ValueError as error:
+            raise ValueError(f"{path}:{line_number}: {name} must be an integer") from error
+
+    validate_settings(settings)
+    return settings
+
+
+def validate_settings(settings: dict[str, int]) -> None:
+    click_force = settings["CLICK_FORCE"]
+    if click_force not in CLICK_FORCE_NAMES:
+        raise ValueError("CLICK_FORCE must be 1 (light), 2 (medium), or 3 (firm)")
+    intensity = settings.get("HAPTIC_INTENSITY")
+    if intensity is not None and not 0 <= intensity <= 100:
+        raise ValueError("HAPTIC_INTENSITY must be from 0 through 100")
+
+
+def set_feature(device: Path, report_id: int, value: int) -> None:
+    payload = bytearray((report_id, value))
+    try:
+        fd = os.open(device, os.O_RDWR | os.O_CLOEXEC)
+    except PermissionError as error:
+        raise RuntimeError(f"cannot open {device}; run this command as root") from error
+    try:
+        transferred = fcntl.ioctl(fd, hid_iocsfeature(len(payload)), payload, True)
+    finally:
+        os.close(fd)
+    if transferred != len(payload):
+        raise RuntimeError(
+            f"SET_FEATURE report {report_id} transferred {transferred} bytes, expected {len(payload)}"
+        )
+
+
+def save_config(path: Path, settings: dict[str, int]) -> None:
+    if path != DEFAULT_CONFIG:
+        raise ValueError(f"--save only supports {DEFAULT_CONFIG}")
+
+    lines = [
+        "# ASUS ExpertBook Ultra B9406CAA PixArt haptic touchpad.",
+        "# Written by asus-b9406-hapticctl --save.",
+        f"CLICK_FORCE={settings['CLICK_FORCE']}",
+    ]
+    if "HAPTIC_INTENSITY" in settings:
+        lines.append(f"HAPTIC_INTENSITY={settings['HAPTIC_INTENSITY']}")
+    content = "\n".join(lines) + "\n"
+
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = -1
+    try:
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            fd = -1
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def format_settings(settings: dict[str, int]) -> list[str]:
+    lines = [f"click force: {settings['CLICK_FORCE']} ({CLICK_FORCE_NAMES[settings['CLICK_FORCE']]})"]
+    intensity = settings.get("HAPTIC_INTENSITY")
+    lines.append(
+        f"haptic intensity: {intensity}%" if intensity is not None else "haptic intensity: unchanged"
+    )
+    return lines
+
+
+def result_payload(
+    device: Path,
+    settings: dict[str, int],
+    *,
+    applied: bool = False,
+    saved: bool = False,
+) -> dict[str, object]:
+    return {
+        "schemaVersion": 1,
+        "ok": True,
+        "device": str(device),
+        "clickForce": settings["CLICK_FORCE"],
+        "clickForceName": CLICK_FORCE_NAMES[settings["CLICK_FORCE"]],
+        "hapticIntensity": settings.get("HAPTIC_INTENSITY"),
+        "readbackAvailable": False,
+        "applied": applied,
+        "saved": saved,
+    }
+
+
+def print_result(
+    device: Path,
+    settings: dict[str, int],
+    *,
+    json_output: bool,
+    applied: bool = False,
+    saved: bool = False,
+    dry_run: bool = False,
+) -> None:
+    if json_output:
+        print(json.dumps(result_payload(device, settings, applied=applied, saved=saved)))
+        return
+
+    print(f"device: {device}")
+    for line in format_settings(settings):
+        print(line)
+    if applied:
+        print("applied and saved" if saved else "applied")
+    elif dry_run:
+        print("dry run: no feature report sent")
+    else:
+        print("device readback: unavailable (firmware rejects HID GET_FEATURE)")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--device", type=Path, help="specific /dev/hidrawN device; must be PixArt 093A:4F05")
+    parser.add_argument("--click-force", type=int, choices=(1, 2, 3), help="1=light, 2=medium, 3=firm")
+    parser.add_argument("--haptic-intensity", type=int, metavar="PERCENT", help="0 through 100")
+    parser.add_argument("--wait", type=float, default=0, metavar="SECONDS", help="wait for the hidraw device")
+    parser.add_argument("--dry-run", action="store_true", help="show the request without writing it")
+    parser.add_argument("--status", action="store_true", help="show the selected device and requested settings")
+    parser.add_argument("--save", action="store_true", help=f"persist applied settings to {DEFAULT_CONFIG}")
+    parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON object")
+    args = parser.parse_args()
+
+    try:
+        if args.wait < 0:
+            raise ValueError("--wait must not be negative")
+        if args.save and (args.status or args.dry_run):
+            raise ValueError("--save cannot be combined with --status or --dry-run")
+        if args.save and args.config != DEFAULT_CONFIG:
+            raise ValueError(f"--save only supports {DEFAULT_CONFIG}")
+        settings = read_config(args.config)
+        if args.click_force is not None:
+            settings["CLICK_FORCE"] = args.click_force
+        if args.haptic_intensity is not None:
+            settings["HAPTIC_INTENSITY"] = args.haptic_intensity
+        validate_settings(settings)
+        device = find_device(args.device, args.wait)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"asus-b9406-hapticctl: {error}", file=sys.stderr)
+        return 1
+
+    if args.status:
+        print_result(device, settings, json_output=args.json)
+        return 0
+    if args.dry_run:
+        print_result(device, settings, json_output=args.json, dry_run=True)
+        return 0
+
+    try:
+        set_feature(device, CLICK_FORCE_REPORT, settings["CLICK_FORCE"])
+        if "HAPTIC_INTENSITY" in settings:
+            set_feature(device, HAPTIC_INTENSITY_REPORT, settings["HAPTIC_INTENSITY"])
+        if args.save:
+            save_config(args.config, settings)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"asus-b9406-hapticctl: {error}", file=sys.stderr)
+        return 1
+
+    print_result(device, settings, json_output=args.json, applied=True, saved=args.save)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
