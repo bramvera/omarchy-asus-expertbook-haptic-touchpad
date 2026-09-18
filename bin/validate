@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLUGIN_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+OMARCHY_ROOT="${OMARCHY_PATH:-/usr/share/omarchy}"
+
+find_qmllint() {
+  if [[ -n "${QMLLINT:-}" ]]; then
+    printf '%s\n' "$QMLLINT"
+    return
+  fi
+  if [[ -x /usr/lib/qt6/bin/qmllint ]]; then
+    printf '%s\n' /usr/lib/qt6/bin/qmllint
+    return
+  fi
+  command -v qmllint || true
+}
+
+QMLLINT_BIN="$(find_qmllint)"
+if [[ -z "$QMLLINT_BIN" ]]; then
+  printf 'Qt 6 qmllint was not found. Set QMLLINT to its full path.\n' >&2
+  exit 1
+fi
+
+VALIDATION_TMP="$(mktemp -d)"
+trap 'rm -rf -- "$VALIDATION_TMP"' EXIT
+
+cd "$PLUGIN_DIR"
+node --test tests/model.test.js
+omarchy plugin validate "$PLUGIN_DIR"
+
+QML_IMPORT_ROOT="$VALIDATION_TMP/qml-import"
+mkdir "$QML_IMPORT_ROOT"
+ln -s "$OMARCHY_ROOT/shell" "$QML_IMPORT_ROOT/qs"
+"$QMLLINT_BIN" -I "$QML_IMPORT_ROOT" BarWidget.qml Panel.qml Service.qml
+
+printf 'Haptic Touchpad validation passed.\n'

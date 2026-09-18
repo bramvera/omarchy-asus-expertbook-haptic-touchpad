@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.bramvera.haptic-touchpad",
+  "name": "Haptic Touchpad",
+  "version": "1.0.0",
+  "author": "Bram Vera",
+  "license": "MIT",
+  "description": "Control click force and haptic feedback intensity for the ASUS B9406CAA touchpad.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Haptic Touchpad",
+    "description": "Adjust the click threshold and haptic feedback strength of the ASUS B9406CAA PixArt touchpad.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
