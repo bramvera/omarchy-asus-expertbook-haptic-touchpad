@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "io.github.bramvera.haptic-touchpad",
-  "name": "Haptic Touchpad",
-  "version": "1.3.0",
+  "name": "ASUS ExpertBook Ultra Haptic Touchpad",
+  "version": "1.4.0",
   "author": "Bram Vera",
   "license": "MIT",
-  "description": "Click force and haptic feedback strength for the PixArt 093A:4F05 haptic touchpad.",
+  "description": "Click force and haptic feedback strength for the ASUS ExpertBook Ultra B9406CAA touchpad (PixArt 093A:4F05).",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,8 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Haptic Touchpad",
-    "description": "Adjust click force and haptic feedback strength from the bar.",
+    "displayName": "ExpertBook Haptic Touchpad",
+    "description": "Adjust click force and haptic feedback strength of the ASUS ExpertBook Ultra touchpad from the bar.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"
