@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.bramvera.haptic-touchpad",
   "name": "Haptic Touchpad",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Bram Vera",
   "license": "MIT",
   "description": "Control click force and haptic feedback intensity for the ASUS B9406CAA touchpad.",

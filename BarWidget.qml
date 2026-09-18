@@ -12,6 +12,7 @@ BarWidget {
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
   readonly property int clickForce: panelLoader.item ? panelLoader.item.clickForce : 3
   readonly property int hapticIntensity: panelLoader.item ? panelLoader.item.hapticIntensity : 100
+  readonly property bool intensityConfigured: panelLoader.item ? panelLoader.item.intensityConfigured : false
   readonly property bool available: panelLoader.item ? panelLoader.item.available : false
 
   function open() { if (panelLoader.item) panelLoader.item.open() }
@@ -60,7 +61,7 @@ BarWidget {
       return JSON.stringify({
         available: root.available,
         clickForce: root.clickForce,
-        hapticIntensity: root.hapticIntensity
+        hapticIntensity: root.intensityConfigured ? root.hapticIntensity : null
       })
     }
   }
@@ -72,7 +73,8 @@ BarWidget {
     text: root.available ? "TP " + root.clickForce : "TP ?"
     active: root.opened
     tooltipText: root.available
-      ? "Haptic Touchpad · " + (["", "Light", "Medium", "Firm"][root.clickForce]) + " · " + root.hapticIntensity + "%"
+      ? "Haptic Touchpad · " + (["", "Light", "Medium", "Firm"][root.clickForce])
+        + " · " + (root.intensityConfigured ? root.hapticIntensity + "%" : "intensity unchanged")
       : "Haptic Touchpad · controller unavailable"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) root.refresh()

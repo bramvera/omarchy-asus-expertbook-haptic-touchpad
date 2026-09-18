@@ -18,12 +18,15 @@ Panel {
 
   readonly property int clickForce: controller.clickForce
   readonly property int hapticIntensity: controller.hapticIntensity
+  readonly property bool intensityConfigured: controller.intensityConfigured
   readonly property bool available: controller.available
   readonly property bool busy: controller.busy
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property bool dirty: draftClickForce !== clickForce || draftIntensity !== hapticIntensity
+  readonly property bool dirty: !intensityConfigured
+    || draftClickForce !== clickForce
+    || draftIntensity !== hapticIntensity
 
   function syncDrafts() {
     draftClickForce = controller.clickForce
@@ -175,6 +178,16 @@ Panel {
             onMoved: function(value) { root.draftIntensity = Math.round(value / 5) * 5 }
             onReleased: function(value) { root.draftIntensity = Math.round(value / 5) * 5 }
           }
+
+          Text {
+            width: parent.width
+            visible: controller.available && !controller.intensityConfigured
+            text: "No intensity is saved yet. Applying will save the selected value and use it at startup."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
         }
 
         Text {
@@ -202,7 +215,7 @@ Panel {
 
         Text {
           width: parent.width
-          text: "Apply asks for administrator approval, saves the settings for startup, and sends them to the touchpad. Firmware readback is unavailable, so displayed values are the saved requested settings."
+          text: "Apply asks for administrator approval, saves the settings for startup, and sends them to the touchpad. Firmware readback is unavailable, so confirmed values come from the saved configuration."
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
