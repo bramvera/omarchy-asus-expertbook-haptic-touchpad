@@ -150,7 +150,7 @@ omarchy-shell shell ping
 
 **Light and Firm feel similar.** They only move the click threshold, so the difference is subtle. To confirm intensity works, compare 0% and 100%.
 
-**Settings do not survive a reboot.** Check the boot service log:
+**Settings do not survive a reboot.** Suspend and resume are fine: the firmware keeps both values across sleep, verified on the B9406CAA. A full power cycle resets them, which is what the boot service is for. Check its log:
 
 ```bash
 journalctl -b -u asus-b9406-haptic-touchpad.service
