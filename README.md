@@ -1,5 +1,7 @@
 # ASUS ExpertBook Ultra Haptic Touchpad
 
+![Haptic Touchpad panel in the Omarchy bar](preview.png)
+
 An [Omarchy](https://omarchy.org) bar widget for the haptic touchpad in the ASUS ExpertBook Ultra B9406CAA, a PixArt `093A:4F05` controller. It is not for Dell XPS haptic touchpads; Omarchy handles those itself. It sets how hard you press before the touchpad clicks and how strong the click feedback feels. Settings apply immediately and are restored at startup.
 
 Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touchpad controller; see [COMPATIBILITY.md](COMPATIBILITY.md) for the hardware check and a four-step test.
