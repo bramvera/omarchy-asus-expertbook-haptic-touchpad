@@ -71,17 +71,7 @@ If you just installed Omarchy on a B9406CAA and the touchpad clicks but the curs
 
 Omarchy ships the right fix but puts it in the wrong place. Its install script writes a libinput quirk to `/etc/libinput/asus-expertbook-b9406.quirks`, and libinput reads only `/etc/libinput/local-overrides.quirks` from that directory, so the fix is never loaded. Checked on Omarchy 4.0.4 with libinput 1.31.3 using `libinput quirks list --verbose`. The Omarchy tag `v4.0.4` and the current default branch both still write the ignored filename. Upstream knows: [PR #6388](https://github.com/omacom/omarchy/pull/6388) carries the fix and was still open at the time of writing.
 
-You have two ways to get the cursor moving. Skip this step if it already works.
-
-Either install the `touchpad-fix` module from [asus-expertbook-linux](https://github.com/burakgon/asus-expertbook-linux), which writes the right file:
-
-```bash
-git clone https://github.com/burakgon/asus-expertbook-linux.git
-cd asus-expertbook-linux
-sudo ./patch.sh install touchpad-fix
-```
-
-Or write the file yourself, then log out and back in:
+Skip this step if the cursor already works. Otherwise write the file yourself, then log out and back in:
 
 ```bash
 sudo tee /etc/libinput/local-overrides.quirks >/dev/null <<'QUIRK'
@@ -95,7 +85,7 @@ AttrEventCode=-ABS_MT_PRESSURE;-ABS_PRESSURE;
 QUIRK
 ```
 
-Either way, the rule only tells libinput to ignore the touchpad's broken pressure axes. This step goes away once Omarchy renames its file.
+The rule only tells libinput to ignore the touchpad's broken pressure axes. This step goes away once Omarchy renames its file. The same fix is packaged as the `touchpad-fix` module of [asus-expertbook-linux](https://github.com/burakgon/asus-expertbook-linux), which is where this quirk comes from.
 
 ### Step 1: add the plugin
 
