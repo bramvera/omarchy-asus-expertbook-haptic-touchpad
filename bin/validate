@@ -28,7 +28,6 @@ trap 'rm -rf -- "$VALIDATION_TMP"' EXIT
 cd "$PLUGIN_DIR"
 node --test tests/model.test.js
 python3 -m py_compile controller/asus-b9406-hapticctl
-bash -n controller/install controller/uninstall
 omarchy plugin validate "$PLUGIN_DIR"
 
 QML_IMPORT_ROOT="$VALIDATION_TMP/qml-import"

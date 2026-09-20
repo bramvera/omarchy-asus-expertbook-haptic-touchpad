@@ -80,7 +80,7 @@ Panel {
     tooltipText: touchpad.available
       ? "Haptic touchpad · " + Model.forceName(touchpad.clickForce)
         + (touchpad.intensityConfigured ? " · " + touchpad.hapticIntensity + "%" : "")
-      : "Haptic touchpad · controller unavailable"
+      : "Haptic touchpad · not set up"
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) touchpad.refresh()
       else root.toggle()
@@ -116,7 +116,7 @@ Panel {
         PanelHero {
           width: parent.width
           title: "Haptic Touchpad"
-          meta: touchpad.available ? "Click force and feedback strength" : "Controller not installed"
+          meta: touchpad.available ? "Click force and feedback strength" : "Touchpad access not set up"
           detail: touchpad.busy ? "Working" : (touchpad.available ? "Ready" : "Unavailable")
           foreground: root.foreground
           fontFamily: root.fontFamily
@@ -208,7 +208,7 @@ Panel {
 
           Caption {
             visible: touchpad.available && !touchpad.intensityConfigured
-            text: "No intensity saved yet. Apply saves both settings and restores them at startup."
+            text: "No intensity saved yet. Apply saves both settings and restores them when the shell starts."
           }
         }
 
@@ -235,7 +235,7 @@ Panel {
           onClicked: root.apply()
         }
 
-        Caption { text: "Apply asks for administrator approval. Settings are saved and restored at startup." }
+        Caption { text: "Settings are saved and restored when the shell starts." }
       }
     }
   }

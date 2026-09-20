@@ -29,12 +29,16 @@ If nothing is found, the touchpad is not supported. If the device matches but th
 
 ## Verify on your machine
 
-Force levels alone are hard to tell apart, so test with intensity first. Each step needs root and changes nothing permanently unless it says so.
+Force levels alone are hard to tell apart, so test with intensity first. The udev rule from the README must be in place. Nothing here changes anything permanently unless it says so.
+
+```bash
+ctl=~/.config/omarchy/plugins/io.github.bramvera.haptic-touchpad/controller/asus-b9406-hapticctl
+```
 
 1. **Dead-click test.** Apply Light at 0% without saving. The click should feel nearly dead, with no vibration. That proves both feature reports reach the firmware.
 
    ```bash
-   sudo asus-b9406-hapticctl --click-force 1 --haptic-intensity 0
+   $ctl --click-force 1 --haptic-intensity 0
    ```
 
 2. **Suspend test.** With that still applied, suspend, resume, and click again. Still dead means the firmware keeps settings across sleep, as the B9406CAA does.
@@ -43,16 +47,15 @@ Force levels alone are hard to tell apart, so test with intensity first. Each st
    systemctl suspend
    ```
 
-3. **Reboot test.** Restore your saved values, save Firm at 100%, reboot, and confirm the boot service applied them.
+3. **Reboot test.** Save Firm at 100%, reboot, and confirm the widget restored them when the shell started.
 
    ```bash
-   sudo systemctl restart asus-b9406-haptic-touchpad.service
-   sudo asus-b9406-hapticctl --save --click-force 3 --haptic-intensity 100
-   sudo reboot
-   journalctl -b -u asus-b9406-haptic-touchpad.service
+   $ctl --save --click-force 3 --haptic-intensity 100
+   systemctl reboot
+   omarchy-shell io.github.bramvera.haptic-touchpad status
    ```
 
-   The log should end with `applied`.
+   The status should report `"available":true` with click force 3 and intensity 100, and the click should feel firm and strong.
 
 4. **Force test.** Compare Light and Firm at the same intensity. The difference is a firmer press before the click registers, roughly 110 to 190 g.
 

@@ -1,6 +1,10 @@
 // Pure helpers shared by Service.qml and the unit tests. No QML here.
 
-var CONTROLLER = "/usr/local/bin/asus-b9406-hapticctl"
+// The controller lives next to the widget. Quickshell resolves it to a
+// file:// URL; the process API needs a plain path.
+function controllerPath(resolvedUrl) {
+  return decodeURIComponent(String(resolvedUrl).replace(/^file:\/\//, ""))
+}
 
 function forceName(value) {
   var names = { 1: "Light", 2: "Medium", 3: "Firm" }
@@ -54,11 +58,17 @@ function parseStatus(raw) {
   }
 }
 
-function statusCommand() {
-  return [CONTROLLER, "--status", "--json"]
+function statusCommand(controller) {
+  return [controller, "--status", "--json"]
 }
 
-function applyCommand(clickForce, hapticIntensity) {
+// Re-send the saved values when the shell starts. The touchpad forgets them
+// when powered off. A no-op until the user has saved something.
+function restoreCommand(controller) {
+  return [controller, "--restore", "--wait", "3", "--json"]
+}
+
+function applyCommand(controller, clickForce, hapticIntensity) {
   var force = Number(clickForce)
   var intensity = Number(hapticIntensity)
   if (!validForce(force))
@@ -69,7 +79,7 @@ function applyCommand(clickForce, hapticIntensity) {
   return {
     ok: true,
     command: [
-      "pkexec", CONTROLLER, "--save",
+      controller, "--save",
       "--click-force", String(force),
       "--haptic-intensity", String(intensity),
       "--json"
@@ -79,11 +89,12 @@ function applyCommand(clickForce, hapticIntensity) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    CONTROLLER: CONTROLLER,
     applyCommand: applyCommand,
     concise: concise,
+    controllerPath: controllerPath,
     forceName: forceName,
     parseStatus: parseStatus,
+    restoreCommand: restoreCommand,
     statusCommand: statusCommand
   }
 }

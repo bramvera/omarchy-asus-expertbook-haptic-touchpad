@@ -4,6 +4,10 @@
 The device exposes standard HID feature reports but does not implement
 GET_FEATURE correctly.  This tool therefore only sends validated SET_FEATURE
 requests and never guesses the device's current state.
+
+It runs as the logged-in user.  A udev rule tags the touchpad's hidraw node
+with "uaccess", which makes systemd-logind grant the active seat read-write
+access, so nothing here needs root.
 """
 
 from __future__ import annotations
@@ -18,7 +22,10 @@ import time
 
 
 HID_ID = "HID_ID=0018:0000093A:00004F05"
-DEFAULT_CONFIG = Path("/etc/asus-b9406-haptic-touchpad.conf")
+CONFIG_NAME = "asus-b9406-haptic-touchpad.conf"
+DEFAULT_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / CONFIG_NAME
+# Where 1.x saved settings as root. Read once so an upgrade keeps the values.
+LEGACY_CONFIG = Path("/etc") / CONFIG_NAME
 CLICK_FORCE_REPORT = 8
 HAPTIC_INTENSITY_REPORT = 9
 CLICK_FORCE_NAMES = {1: "light", 2: "medium", 3: "firm"}
@@ -80,10 +87,21 @@ def find_device(explicit: Path | None, wait_seconds: float) -> Path:
         time.sleep(0.25)
 
 
+def config_source(path: Path) -> Path | None:
+    """The file settings come from, or None when nothing has been saved yet."""
+    if path.exists():
+        return path
+    if path == DEFAULT_CONFIG and LEGACY_CONFIG.exists():
+        return LEGACY_CONFIG
+    return None
+
+
 def read_config(path: Path) -> dict[str, int]:
     settings: dict[str, int] = {"CLICK_FORCE": 3}
-    if not path.exists():
+    source = config_source(path)
+    if source is None:
         return settings
+    path = source
 
     valid = {"CLICK_FORCE", "HAPTIC_INTENSITY"}
     for line_number, original in enumerate(path.read_text().splitlines(), start=1):
@@ -118,7 +136,9 @@ def set_feature(device: Path, report_id: int, value: int) -> None:
     try:
         fd = os.open(device, os.O_RDWR | os.O_CLOEXEC)
     except PermissionError as error:
-        raise RuntimeError(f"cannot open {device}; run this command as root") from error
+        raise RuntimeError(
+            f"cannot open {device}; install the udev rule from the README, then log out and back in"
+        ) from error
     try:
         transferred = fcntl.ioctl(fd, hid_iocsfeature(len(payload)), payload, True)
     finally:
@@ -142,10 +162,11 @@ def save_config(path: Path, settings: dict[str, int]) -> None:
         lines.append(f"HAPTIC_INTENSITY={settings['HAPTIC_INTENSITY']}")
     content = "\n".join(lines) + "\n"
 
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     fd = -1
     try:
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             fd = -1
             output.write(content)
@@ -223,6 +244,11 @@ def main() -> int:
     parser.add_argument("--wait", type=float, default=0, metavar="SECONDS", help="wait for the hidraw device")
     parser.add_argument("--dry-run", action="store_true", help="show the request without writing it")
     parser.add_argument("--status", action="store_true", help="show the selected device and requested settings")
+    parser.add_argument(
+        "--restore",
+        action="store_true",
+        help="apply the saved settings if any were saved; otherwise do nothing",
+    )
     parser.add_argument("--save", action="store_true", help=f"persist applied settings to {DEFAULT_CONFIG}")
     parser.add_argument("--json", action="store_true", help="emit one machine-readable JSON object")
     args = parser.parse_args()
@@ -232,6 +258,9 @@ def main() -> int:
             raise ValueError("--wait must not be negative")
         if args.save and (args.status or args.dry_run):
             raise ValueError("--save cannot be combined with --status or --dry-run")
+        if args.restore and (args.save or args.status or args.dry_run
+                             or args.click_force is not None or args.haptic_intensity is not None):
+            raise ValueError("--restore takes no other setting or mode")
         if args.save and args.config != DEFAULT_CONFIG:
             raise ValueError(f"--save only supports {DEFAULT_CONFIG}")
         settings = read_config(args.config)
@@ -245,7 +274,7 @@ def main() -> int:
         print(f"asus-b9406-hapticctl: {error}", file=sys.stderr)
         return 1
 
-    if args.status:
+    if args.status or (args.restore and config_source(args.config) is None):
         print_result(device, settings, json_output=args.json)
         return 0
     if args.dry_run:

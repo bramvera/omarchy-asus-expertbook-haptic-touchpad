@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.bramvera.haptic-touchpad",
   "name": "ASUS ExpertBook Ultra Haptic Touchpad",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "author": "Bram Vera",
   "license": "MIT",
   "description": "Click force and haptic feedback strength for the ASUS ExpertBook Ultra B9406CAA touchpad (PixArt 093A:4F05).",

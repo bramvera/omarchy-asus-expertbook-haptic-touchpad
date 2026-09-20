@@ -2,7 +2,7 @@
 
 ![Haptic Touchpad panel in the Omarchy bar](preview.png)
 
-An [Omarchy](https://omarchy.org) bar widget for the haptic touchpad in the ASUS ExpertBook Ultra B9406CAA, a PixArt `093A:4F05` controller. It is not for Dell XPS haptic touchpads; Omarchy handles those itself. It sets how hard you press before the touchpad clicks and how strong the click feedback feels. Settings apply immediately and are restored at startup.
+An [Omarchy](https://omarchy.org) bar widget for the haptic touchpad in the ASUS ExpertBook Ultra B9406CAA, a PixArt `093A:4F05` controller. It is not for Dell XPS haptic touchpads; Omarchy handles those itself. It sets how hard you press before the touchpad clicks and how strong the click feedback feels. Settings apply immediately and are restored when the shell starts.
 
 Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touchpad controller; see [COMPATIBILITY.md](COMPATIBILITY.md) for the hardware check and a four-step test.
 
@@ -17,10 +17,10 @@ Verified on the ASUS ExpertBook B9406CAA. Other laptops must have the same touch
 
 The repository has two parts:
 
-- **The bar widget** (`Panel.qml` and friends) runs inside the Omarchy shell as an ordinary user. It reads the saved settings and shows the panel.
-- **The controller** (`controller/asus-b9406-hapticctl`) is a small Python script with no dependencies beyond the standard library. It sends HID feature reports to the touchpad through the kernel's hidraw interface. A systemd unit runs it at boot to restore the saved values.
+- **The bar widget** (`Panel.qml` and friends) runs inside the Omarchy shell as your user. It shows the panel and, when the shell starts, re-sends the saved settings.
+- **The controller** (`controller/asus-b9406-hapticctl`) is a small Python script with no dependencies beyond the standard library. It sends HID feature reports to the touchpad through the kernel's hidraw interface and keeps the saved values in `~/.config/asus-b9406-haptic-touchpad.conf`.
 
-No kernel module or driver is needed. The touchpad already works with the in-tree `hid-multitouch` driver. The widget never runs as root: pressing **Apply settings** invokes the controller through Polkit with validated numeric arguments.
+Both run as your user. The only privileged step is a one-time udev rule that lets your session open the touchpad's device node; see below. No kernel module or driver is needed. The touchpad already works with the in-tree `hid-multitouch` driver.
 
 ## Why Omarchy does not already do this
 
@@ -39,23 +39,19 @@ The two settings this plugin changes are standard HID feature reports that the k
 
 These are "device-initiated" knobs: the touchpad decides when to click and how hard to vibrate, and the host only adjusts the thresholds. A June 2026 proposal on the linux-input list to expose exactly these two usages was still an open RFC at the time of writing, with the maintainer preferring the host-initiated model. Until something like it lands, the only way to set them on Linux is to write the feature reports directly, which is what the controller here does through hidraw. Windows exposes the same two knobs as the "Touchpad feedback" and click-pressure settings.
 
-## Why this needs root
+## Why this needs a udev rule
 
-The touchpad's hidraw device node is owned by root with no group or world access. Sending it a feature report means opening that node for writing, and the kernel allows only root to do so. Everything privileged in this plugin exists to cross that one line as narrowly as possible.
+The touchpad's hidraw device node is owned by root with no group or world access. Sending it a feature report means opening that node for writing, and by default only root can. Version 1 of this plugin crossed that line with a root-installed controller, a Polkit prompt on every Apply, and a systemd unit at boot. Version 2 removes the line instead.
 
-What runs as root, and when:
+One udev rule tags the node with `uaccess`:
 
-| When | What runs | Why |
-|---|---|---|
-| Once, at install | `controller/install` | Copies the controller and boot service into `/usr/local/bin` and `/etc/systemd/system`, and enables the service. |
-| At every boot | `asus-b9406-hapticctl --wait 12` | Re-sends the saved values, because the touchpad forgets them when powered off. |
-| Each time you press Apply | `pkexec asus-b9406-hapticctl --save --click-force N --haptic-intensity N --json` | Writes the two values to the device and saves them. Polkit shows a dialog every time. |
+```
+SUBSYSTEM=="hidraw", KERNELS=="0018:093A:4F05.*", TAG+="uaccess"
+```
 
-What never runs as root: the widget itself. It lives in the Omarchy shell as your user and only reads status. The command it hands to Polkit is a fixed absolute path plus two integers that the widget has already range-checked, built as an argument list with no shell involved.
+`uaccess` is the standard systemd mechanism that gives the user at the active seat access to devices such as webcams and security keys. systemd-logind adds an ACL for your user to that one node, and removes it when you log out. Nothing else changes. The rule matches only the PixArt `093A:4F05` HID device, so no other hidraw node is exposed.
 
-What the controller does with root: it opens only the one hidraw device whose HID id is `0018:0000093A:00004F05`, writes two single-byte feature reports (report 8 for click force, report 9 for intensity), and writes one file, `/etc/asus-b9406-haptic-touchpad.conf`. It has no network access, imports only the Python standard library, and is about 270 lines. The boot service runs with `ProtectHome`, `PrivateTmp`, and `NoNewPrivileges`.
-
-Read `controller/asus-b9406-hapticctl` and `controller/install` before running them. That is the whole privileged surface.
+With the rule in place, the widget, the controller, and the saved settings file are all yours and all unprivileged. Nothing in the plugin directory is ever read, copied, or executed as root. The only thing root ever does is write that one static line, once, with `tee`, from text you paste yourself.
 
 ## Requirements
 
@@ -95,69 +91,79 @@ Add the plugin. The Omarchy installer clones the repository and never runs anyth
 omarchy plugin add https://github.com/bramvera/omarchy-asus-expertbook-haptic-touchpad.git --enable
 ```
 
-### Step 2: install the controller
+### Step 2: let your session open the touchpad
 
-Run the installer from the cloned plugin directory. It needs root because it writes to `/usr/local/bin` and `/etc`:
+Write the udev rule and load it. This is the one step that needs root, and it runs only `tee` and `udevadm`:
 
 ```bash
-sudo ~/.config/omarchy/plugins/io.github.bramvera.haptic-touchpad/controller/install
+sudo tee /etc/udev/rules.d/70-asus-b9406-haptic-touchpad.rules >/dev/null <<'RULE'
+SUBSYSTEM=="hidraw", KERNELS=="0018:093A:4F05.*", TAG+="uaccess"
+RULE
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-The installer refuses to continue if no matching touchpad is present. On success it prints the current settings and the uninstall command and the widget appears in the right section of the bar. Right-click the icon if it was already showing "controller unavailable".
+It takes effect immediately for the current session and at every boot after that. Right-click the icon in the bar if it was already showing "not set up".
+
+### Upgrading from 1.x
+
+Version 1 installed a root-owned controller and a boot service. Remove them with the uninstaller it left in `/usr/local/bin`, then do Step 2:
+
+```bash
+sudo asus-b9406-haptic-touchpad-uninstall
+```
+
+Your saved settings carry over: the controller reads `/etc/asus-b9406-haptic-touchpad.conf` until you press Apply once, which writes them to `~/.config` instead. After that the file in `/etc` can be deleted.
 
 
 ## Usage
 
 - Left-click the icon to open the panel. Right-click to refresh.
 - Pick **Light**, **Medium**, or **Firm**, set the intensity, and press **Apply settings**.
-- Approve the Polkit dialog.
 
 Keyboard: arrow keys change the values, Enter applies, Escape closes.
 
 The touchpad firmware cannot report its current values, so the panel shows the values that were last saved.
 
-Without the panel, the same settings can be changed from a terminal. The controller keeps them in `/etc/asus-b9406-haptic-touchpad.conf` and the boot service re-applies that file:
+Without the panel, the same settings can be changed from a terminal. The controller keeps them in `~/.config/asus-b9406-haptic-touchpad.conf`, and the widget re-applies that file when the shell starts:
 
 ```bash
-sudo asus-b9406-hapticctl --click-force 2 --haptic-intensity 80          # try without saving
-sudo asus-b9406-hapticctl --save --click-force 3 --haptic-intensity 100  # apply and save
+ctl=~/.config/omarchy/plugins/io.github.bramvera.haptic-touchpad/controller/asus-b9406-hapticctl
+$ctl --click-force 2 --haptic-intensity 80          # try without saving
+$ctl --save --click-force 3 --haptic-intensity 100  # apply and save
+$ctl --restore                                      # what the widget does at startup
 ```
 
 ## Troubleshooting
 
-**The panel says the controller is unavailable.** Check the binary and service:
+**The panel says "not set up".** Your session cannot open the touchpad's device node. Check that the rule exists and that logind has granted you access:
 
 ```bash
-asus-b9406-hapticctl --status --json
-systemctl status asus-b9406-haptic-touchpad.service
+cat /etc/udev/rules.d/70-asus-b9406-haptic-touchpad.rules
+for d in /sys/class/hidraw/hidraw*; do
+  grep -q 'HID_ID=0018:0000093A:00004F05' "$d/device/uevent" && getfacl -p "/dev/$(basename "$d")"
+done
 ```
 
-If either fails, run `controller/install` again.
-
-**No Polkit dialog appears.** Make sure the session is unlocked and the shell is running:
-
-```bash
-omarchy-shell shell ping
-```
+The ACL output should include a `user:<you>:rw-` line. If the rule is there but the line is missing, run the `udevadm` commands from Step 2 again, or log out and back in.
 
 **Light and Firm feel similar.** They only move the click threshold, so the difference is subtle. To confirm intensity works, compare 0% and 100%.
 
-**Settings do not survive a reboot.** Suspend and resume are fine: the firmware keeps both values across sleep, verified on the B9406CAA. A full power cycle resets them, which is what the boot service is for. Check its log:
+**Settings do not survive a reboot.** Suspend and resume are fine: the firmware keeps both values across sleep, verified on the B9406CAA. A full power cycle resets them, and the widget re-sends the saved values when the shell starts. Confirm what it applied:
 
 ```bash
-journalctl -b -u asus-b9406-haptic-touchpad.service
+omarchy-shell io.github.bramvera.haptic-touchpad status
 ```
 
 ## Removal
 
-Two steps, in either order. Omarchy removes the plugin files; the uninstaller removes the controller and boot service it installed:
+Omarchy removes the plugin files, and the udev rule is one file to delete:
 
 ```bash
 omarchy plugin remove io.github.bramvera.haptic-touchpad
-sudo asus-b9406-haptic-touchpad-uninstall
+sudo rm /etc/udev/rules.d/70-asus-b9406-haptic-touchpad.rules
 ```
 
-The uninstaller is placed in `/usr/local/bin` during installation, so it still works after the plugin directory is gone. The saved settings file `/etc/asus-b9406-haptic-touchpad.conf` is kept.
+The saved settings in `~/.config/asus-b9406-haptic-touchpad.conf` are kept; delete the file if you do not want them.
 
 ## Development
 
@@ -165,7 +171,7 @@ The uninstaller is placed in `/usr/local/bin` during installation, so it still w
 bin/validate
 ```
 
-This runs the model unit tests, `omarchy plugin validate`, `qmllint`, and syntax checks for the controller and install scripts. Saving a file under `~/.config/omarchy/plugins/` hot-reloads the plugin. Changing `entryPoints` in the manifest needs `omarchy-restart-shell`.
+This runs the model unit tests, `omarchy plugin validate`, `qmllint`, and a syntax check of the controller. Saving a file under `~/.config/omarchy/plugins/` hot-reloads the plugin. Changing `entryPoints` in the manifest needs `omarchy-restart-shell`.
 
 IPC:
 
